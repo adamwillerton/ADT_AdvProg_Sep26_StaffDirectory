@@ -20,6 +20,8 @@ The SQLite database file (`staff.db`) is created automatically when you first ru
 
 OPEN IN CODESPACES!!!!!
 
+Ensure python extension is installed!
+
 Then....
 ### 1. Create and activate a virtual environment
 ```bash
