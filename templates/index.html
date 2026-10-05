@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Directory</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header>
+    <span style="font-size:1.5rem;">👥</span>
+    <h1>Staff Directory</h1>
+</header>
+
+<div class="container">
+
+    <div id="toast" class="toast"></div>
+
+    <div class="card">
+        <h2 id="form-title">Add New Staff Member</h2>
+        <form id="staff-form">
+            <input type="hidden" id="staff-id">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="name">Full Name</label>
+                    <input type="text" id="name" placeholder="e.g. Jane Smith" required>
+                </div>
+                <div class="form-group">
+                    <label for="role">Role</label>
+                    <input type="text" id="role" placeholder="e.g. Software Engineer" required>
+                </div>
+                <div class="form-group">
+                    <label for="department">Department</label>
+                    <input type="text" id="department" placeholder="e.g. Technology" required>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" id="submit-btn">Add Staff</button>
+                <button type="button" class="btn btn-secondary" id="cancel-btn" style="display:none" onclick="resetForm()">Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>All Staff &nbsp;<span class="staff-count" id="staff-count"></span></h2>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Name</th>
+                        <th>Role</th>
+                        <th>Department</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="staff-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    var API = '/api/staff';
+
+    // Store staff records by id — buttons only pass the id number
+    var staffData = {};
+
+    function htmlEsc(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // ── Load and display all staff ────────────────────────────────────────────
+    function loadStaff() {
+        fetch(API)
+            .then(function(r) { return r.json(); })
+            .then(function(staff) {
+                staffData = {};
+                staff.forEach(function(s) { staffData[s.id] = s; });
+
+                var count = document.getElementById('staff-count');
+                count.textContent = '(' + staff.length + ' member' + (staff.length !== 1 ? 's' : '') + ')';
+
+                var tbody = document.getElementById('staff-tbody');
+
+                if (staff.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No staff members found. Add one above.</div></td></tr>';
+                    return;
+                }
+
+                var rows = '';
+                for (var i = 0; i < staff.length; i++) {
+                    var s = staff[i];
+                    rows +=
+                        '<tr>' +
+                        '<td>' + (i + 1) + '</td>' +
+                        '<td><strong>' + htmlEsc(s.name) + '</strong></td>' +
+                        '<td>' + htmlEsc(s.role) + '</td>' +
+                        '<td><span class="badge">' + htmlEsc(s.department) + '</span></td>' +
+                        '<td><div class="actions-cell">' +
+                            '<button class="btn btn-edit"   onclick="handleEdit(' + s.id + ')">Edit</button>' +
+                            '<button class="btn btn-delete" onclick="handleDelete(' + s.id + ')">Delete</button>' +
+                        '</div></td>' +
+                        '</tr>';
+                }
+                tbody.innerHTML = rows;
+            })
+            .catch(function(err) { console.error('Failed to load staff:', err); });
+    }
+
+    // ── Edit: pre-fill the form ───────────────────────────────────────────────
+    function handleEdit(id) {
+        var s = staffData[id];
+        if (!s) { alert('Record not found — please refresh the page.'); return; }
+
+        document.getElementById('staff-id').value           = s.id;
+        document.getElementById('name').value               = s.name;
+        document.getElementById('role').value               = s.role;
+        document.getElementById('department').value         = s.department;
+        document.getElementById('form-title').textContent   = 'Edit Staff Member';
+        document.getElementById('submit-btn').textContent   = 'Save Changes';
+        document.getElementById('cancel-btn').style.display = 'inline-block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ── Delete: confirm then call API ─────────────────────────────────────────
+    function handleDelete(id) {
+        var s = staffData[id];
+        if (!s) { alert('Record not found — please refresh the page.'); return; }
+        if (!confirm('Delete ' + s.name + '? This cannot be undone.')) return;
+
+        fetch(API + '/' + id, { method: 'DELETE' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                showToast(data.message || 'Deleted successfully.', 'success');
+                loadStaff();
+            })
+            .catch(function() { showToast('Delete failed.', 'error'); });
+    }
+
+    // ── Form submit: add or update ────────────────────────────────────────────
+    document.getElementById('staff-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        var id      = document.getElementById('staff-id').value;
+        var url     = id ? API + '/' + id : API;
+        var method  = id ? 'PUT' : 'POST';
+        var payload = {
+            name:       document.getElementById('name').value.trim(),
+            role:       document.getElementById('role').value.trim(),
+            department: document.getElementById('department').value.trim()
+        };
+
+        fetch(url, {
+            method:  method,
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.id) {
+                showToast(data.name + (id ? ' updated successfully.' : ' added successfully.'), 'success');
+                resetForm();
+                loadStaff();
+            } else {
+                showToast(data.error || 'Something went wrong.', 'error');
+            }
+        })
+        .catch(function() { showToast('Could not connect to the server.', 'error'); });
+    });
+
+    // ── Reset form back to Add mode ───────────────────────────────────────────
+    function resetForm() {
+        document.getElementById('staff-form').reset();
+        document.getElementById('staff-id').value           = '';
+        document.getElementById('form-title').textContent   = 'Add New Staff Member';
+        document.getElementById('submit-btn').textContent   = 'Add Staff';
+        document.getElementById('cancel-btn').style.display = 'none';
+    }
+
+    // ── Toast notification ────────────────────────────────────────────────────
+    function showToast(msg, type) {
+        var el = document.getElementById('toast');
+        el.textContent = msg;
+        el.className = 'toast ' + type;
+        setTimeout(function() { el.className = 'toast'; }, 3500);
+    }
+
+    // ── Initial load ──────────────────────────────────────────────────────────
+    loadStaff();
+</script>
+
+</body>
+</html>
